@@ -1,0 +1,103 @@
+import pandas as pd
+import numpy as np
+import re
+import matplotlib.pyplot as plt
+from wordcloud import WordCloud
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+
+# load data
+candidate1_tweets = pd.read_csv("candidate1_tweets.csv")
+candidate2_tweets = pd.read_csv("candidate2_tweets.csv")
+
+# clean text data
+def clean_text(text):
+    text = text.lower()
+    text = re.sub(r"http\S+", "", text) # remove URLs
+    text = re.sub(r"[^a-zA-Z0-9]+", " ", text) # remove non-alphanumeric characters
+    text = re.sub(r"\b\w{1,2}\b", "", text) # remove short words
+    return text
+
+candidate1_tweets["text_clean"] = candidate1_tweets["text"].apply(clean_text)
+candidate2_tweets["text_clean"] = candidate2_tweets["text"].apply(clean_text)
+
+# create word clouds
+wordcloud1 = WordCloud(width = 800, height = 800, background_color ='white', 
+                       stopwords = set(), min_font_size = 10).generate(' '.join(candidate1_tweets["text_clean"]))
+wordcloud2 = WordCloud(width = 800, height = 800, background_color ='white', 
+                       stopwords = set(), min_font_size = 10).generate(' '.join(candidate2_tweets["text_clean"]))
+
+plt.figure(figsize = (8, 8), facecolor = None) 
+plt.imshow(wordcloud1) 
+plt.axis("off") 
+plt.tight_layout(pad = 0) 
+plt.show()
+
+plt.figure(figsize = (8, 8), facecolor = None) 
+plt.imshow(wordcloud2) 
+plt.axis("off") 
+plt.tight_layout(pad = 0) 
+plt.show()
+
+# create term frequency plots
+vectorizer = CountVectorizer(stop_words="english")
+X1 = vectorizer.fit_transform(candidate1_tweets["text_clean"])
+X2 = vectorizer.fit_transform(candidate2_tweets["text_clean"])
+
+terms1 = vectorizer.get_feature_names()
+freq1 = np.asarray(X1.sum(axis=0)).ravel()
+df1 = pd.DataFrame({"term": terms1, "freq": freq1})
+df1 = df1.sort_values("freq", ascending=False)
+
+terms2 = vectorizer.get_feature_names()
+freq2 = np.asarray(X2.sum(axis=0)).ravel()
+df2 = pd.DataFrame({"term": terms2, "freq": freq2})
+df2 = df2.sort_values("freq", ascending=False)
+
+plt.bar(df1["term"][:20], df1["freq"][:20])
+plt.xticks(rotation=45, ha="right")
+plt.title("Term Frequency for Candidate 1")
+plt.show()
+
+plt.bar(df2["term"][:20], df2["freq"][:20])
+plt.xticks(rotation=45, ha="right")
+plt.title("Term Frequency for Candidate 2")
+plt.show()
+
+# create document-term matrix
+vectorizer = CountVectorizer(stop_words="english")
+X = vectorizer.fit_transform(candidate1_tweets["text_clean"] + candidate2_tweets["text_clean"])
+
+# split data into train-test subsets
+y = np.concatenate([np.repeat(0, len(candidate1_tweets)), np.repeat(1, len(candidate2_tweets))])
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42
+
+# build logistic regression model
+model = LogisticRegression()
+model.fit(X_train, y_train)
+
+# perform variable selection
+coef = model.coef_[0]
+indices = np.argsort(coef)[::-1]
+features = vectorizer.get_feature_names()
+
+print("Top 10 positive terms:")
+for i in range(10):
+    print(features[indices[i]])
+
+print("Top 10 negative terms:")
+for i in range(10):
+    print(features[indices[-i-1]])
+
+# visualize test statistic for each term's coefficient
+test_stat = model.coef_[0] / model.coef_std_[0]
+plt.bar(features, test_stat)
+plt.xticks(rotation=45, ha="right")
+plt.title("Test Statistic for Each Term's Coefficient")
+plt.show()
+
+# report test set accuracy
+accuracy = model.score(X_test, y_test)
+print("Test set accuracy:", accuracy)
+
